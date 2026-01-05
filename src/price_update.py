@@ -6,7 +6,7 @@ def price_update_workflow(input_excel_path, brand_name):
     """
     Reads an Excel input, transforms it for Amazon price updates, and generates a flatfile.
     """
-    output_dir = os.path.join('BRANDS', brand_name, 'output')
+    output_dir = 'excel_templates'
     os.makedirs(output_dir, exist_ok=True) # Ensure output directory exists
     try:
         # 1. Read Input

@@ -3,18 +3,19 @@
   "version": "1.0.0",
   "description": "Automate Amazon flatfile tasks.",
   "scripts": {
-    "run:price-update": "python src/price_update.py --brand SL",
-    "recommend:restock": "python src/restock_recommender.py --brand SL",
-    "generate:promotions": "python src/generate_promotional_suggestions.py --brand SL",
-    "run:listing-creation": "python src/listing_creation.py --brand SL",
-    "validate:template": "python src/template_validator.py --template price_update --brand SL",
-    "analyze:data": "python src/analyze_data.py --brand SL",
-    "forge:excel-template": "python src/forge_trojan_horse.py",
-    "forge:sentiment-report": "python src/forge_sentiment_report.py",
-    "forge:calculator": "python src/forge_calculator.py",
-    "forge:restock-report": "python src/forge_restock_report.py",
-    "forge:competitor-analysis": "python src/forge_competitor_analysis.py",
-    "start": "echo 'Choose a script: npm run run:price-update, npm run recommend:restock, npm run generate:promotions, npm run run:listing-creation, npm run validate:template, npm run analyze:data, forge:calculator, etc. Remember to specify the brand using --brand [BRAND_NAME] if not using the default SL.'"
+    "run:price-update": ".\\.venv\\Scripts\\python src/price_update.py --brand SL",
+    "recommend:restock": ".\\.venv\\Scripts\\python src/restock_recommender.py --brand SL",
+    "generate:promotions": ".\\.venv\\Scripts\\python src/generate_promotional_suggestions.py --brand SL",
+    "run:listing-creation": ".\\.venv\\Scripts\\python src/listing_creation.py --brand SL",
+    "validate:template": ".\\.venv\\Scripts\\python src/template_validator.py --template price_update --brand SL",
+    "analyze:data": ".\\.venv\\Scripts\\python src/analyze_data.py --brand SL",
+    "forge:excel-template": ".\\.venv\\Scripts\\python src/forge_trojan_horse.py",
+    "forge:sentiment-report": ".\\.venv\\Scripts\\python src/forge_sentiment_report.py",
+    "forge:calculator": ".\\.venv\\Scripts\\python src/forge_calculator.py",
+    "forge:restock-report": ".\\.venv\\Scripts\\python src/forge_restock_report.py",
+    "forge:competitor-analysis": ".\\.venv\\Scripts\\python src/forge_competitor_analysis.py",
+    "recommend:buy": ".\\.venv\\Scripts\\python src/ws_buy_rec.py",
+    "start": "echo 'Available commands: npm run run:price-update, npm run recommend:restock, npm run generate:promotions, npm run run:listing-creation, npm run validate:template, npm run analyze:data, npm run forge:calculator, etc. All scripts use the local .venv. Use --brand [BRAND_NAME] to override default SL.'"
   },
   "devDependencies": {
     "cross-env": "^7.0.3"

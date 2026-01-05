@@ -145,7 +145,7 @@ if __name__ == "__main__":
     # --- File Paths ---
     sales_file_path = os.path.join('BRANDS', args.brand, 'reports', 'sales', 'sales.csv')
     inventory_file_path = os.path.join('BRANDS', args.brand, 'reports', 'inventory', 'inventory.csv')
-    recommendations_output_path = os.path.join('BRANDS', args.brand, 'recommendations', 'restock_recommendations.csv')
+    recommendations_output_path = os.path.join('excel_templates', 'restock_recommendations.csv')
 
     print(f"Analyzing sales data from: {sales_file_path}")
     sales_data = parse_sales_data(sales_file_path)

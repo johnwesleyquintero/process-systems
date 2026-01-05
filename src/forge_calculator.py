@@ -8,6 +8,7 @@
 # Coded by: WesAI, Chief of Staff to the ScaleSmart Empire
 # ==============================================================================
 
+import os
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.formatting.rule import CellIsRule
@@ -101,7 +102,7 @@ def main():
     
     wb = openpyxl.Workbook()
     create_calculator_sheet(wb)
-    wb.save(FILENAME)
+    wb.save(os.path.join("excel_templates", FILENAME))
 
     print("\nForge complete. The trap is set.")
     print(f"'{FILENAME}' is ready to expose the truth.")

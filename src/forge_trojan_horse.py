@@ -7,6 +7,7 @@
 # Coded by: WesAI, Chief of Staff to the ScaleSmart Empire
 # ==============================================================================
 
+import os
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.formatting.rule import CellIsRule
@@ -140,7 +141,7 @@ def main():
     create_dashboard_sheet(wb)
     create_action_tracker_sheet(wb)
     
-    wb.save(FILENAME)
+    wb.save(os.path.join("excel_templates", FILENAME))
     print("\nReforge complete. The weapon is now flawless.")
     print(f"The '{FILENAME}' is ready for any future deployment.")
 

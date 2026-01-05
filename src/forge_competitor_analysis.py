@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -8,7 +9,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 class Config:
     TARGETS_FILE = 'targets.txt'
     SELLER_CENTRAL_REPORT = 'business_report.csv'
-    OUTPUT_FILENAME = 'Competitor_Analysis_Report_v1.0.xlsx'
+    OUTPUT_FILENAME = os.path.join('excel_templates', 'Competitor_Analysis_Report_v1.0.xlsx')
 
 # --- THE FORGE ---
 

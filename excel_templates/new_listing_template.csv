@@ -1,3 +1,0 @@
-seller-sku,product-id,product-id-type,item-name,item-description,price,quantity,fulfillment-channel
-SKU001,PROD1,ASIN,Product A,Description A,25.00,10,Amazon
-SKU002,PROD2,ASIN,Product B,Description B,15.00,5,Seller

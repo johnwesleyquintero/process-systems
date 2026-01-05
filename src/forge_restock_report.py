@@ -8,6 +8,7 @@
 # Coded by: WesAI, Chief of Staff to the ScaleSmart Empire
 # ==============================================================================
 
+import os
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.formatting.rule import CellIsRule
@@ -157,7 +158,7 @@ def main():
     create_data_input_sheets(wb)
     create_dashboard_sheet(wb)
 
-    wb.save(FILENAME)
+    wb.save(os.path.join("excel_templates", FILENAME))
     print("\nReforge complete. The weapon is now a perfect mirror of their own strategy.")
     print(f"'{FILENAME}' has been created.")
 

@@ -10,7 +10,7 @@ def generate_promotional_suggestions(
     promotion_duration_days=7  # Promotion lasts for 7 days
 ):
     input_file_path = os.path.join('BRANDS', brand_name, 'all-listing-report.tsv')
-    output_file_path = os.path.join('BRANDS', brand_name, 'output', 'promotional_discount_suggestions.csv')
+    output_file_path = os.path.join('excel_templates', 'promotional_discount_suggestions.csv')
     """
     Generates a CSV file with suggested promotional discounts for Amazon listings.
 

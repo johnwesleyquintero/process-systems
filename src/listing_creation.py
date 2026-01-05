@@ -6,7 +6,7 @@ def create_new_listing(
     input_file_path='excel_templates/new_listing_template.csv',
     brand_name='SL' # Default brand
 ):
-    output_file_path = os.path.join('BRANDS', brand_name, 'output', 'amazon_new_listing_flatfile.csv')
+    output_file_path = os.path.join('excel_templates', 'amazon_new_listing_flatfile.csv')
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True) # Ensure output directory exists
     """
     Generates an Amazon-ready flat file for new product listings.
