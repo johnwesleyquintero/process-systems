@@ -21,9 +21,9 @@ The goal of this system is to improve our team's efficiency and accuracy, reduce
 
 ---
 
-## The Pythonic Arsenal: Current Capabilities
+## The Pythonic Toolkit: Current Capabilities
 
-This repository contains two primary types of systems: **Flatfile Generators** for direct Amazon uploads, and **Template Forges** for creating intelligent analysis tools.
+This repository contains two primary types of systems: **Flatfile Generators** for direct Amazon uploads, and **Advanced Template Forges** for creating data-driven analysis tools.
 
 ### Flatfile Generation Suite
 
@@ -66,36 +66,36 @@ This suite of scripts generates Amazon-ready flat files for direct upload, strea
 
 ---
 
-### Excel Template Generation Suite (The Trojan Horses)
+### Strategic Analysis Templates
 
-This suite of scripts doesn't generate flat files; it forges powerful, intelligent Excel templates from scratch. These templates are designed to look like simple spreadsheets but contain sophisticated, data-driven logic to automate analysis and guide strategic decision-making.
+This suite of scripts generates advanced, data-driven Excel templates designed to automate complex analysis and guide strategic decision-making. These templates provide structured frameworks for inventory management, profitability assessment, and competitive tracking.
 
 *   **Buy Box Dominance Tracker**
-    *   **Purpose:** Forges the `Buy_Box_Dominance_Tracker.xlsx`, an intelligent dashboard that analyzes sales and traffic data to automatically prioritize ASINs that are losing the Buy Box and suggests corrective actions. It transforms a reactive monitoring task into a proactive, strategic operation.
+    *   **Purpose:** Generates the `Buy_Box_Dominance_Tracker.xlsx`, an analytical dashboard that processes sales and traffic data to identify ASINs losing the Buy Box and suggests corrective actions.
     *   **Script:** `src/forge_trojan_horse.py`
     *   **Command:** `npm run forge:buybox-tracker`
     *   **Output:** `excel_templates/Buy_Box_Dominance_Tracker_v1.1.xlsx`
-    *   **Template Usage:** Paste the 'Detail Page Sales & Traffic' report into the `Data_Input` tab. The `Buy_Box_Dashboard` will auto-populate, highlighting critical issues in red and suggesting priority levels.
+    *   **Template Usage:** Paste the 'Detail Page Sales & Traffic' report into the `Data_Input` tab. The `Buy_Box_Dashboard` will auto-populate, highlighting critical issues and suggesting priority levels.
 
 *   **Restock Recommender**
-    *   **Purpose:** Forges the `Restock_Recommender.xlsx`, a complete supply chain command center. It blends data from FBA Inventory and Business Reports to calculate `Days of Supply` and provide a precise, 60-day forecast for `Recommended Units` to order. It includes a "Forecast Control Panel" to model for holidays and promotions.
+    *   **Purpose:** Generates the `Restock_Recommender.xlsx`, a comprehensive supply chain management tool. It integrates data from FBA Inventory and Business Reports to calculate inventory requirements and provide a precise 60-day restock forecast.
     *   **Script:** `src/forge_restock_report.py`
     *   **Command:** `npm run forge:restock-recommender`
     *   **Output:** `excel_templates/Restock_Recommender_v1.2.xlsx`
-    *   **Template Usage:** Paste the FBA Inventory and Business Report data into their respective `Data_Input` tabs. The `Restock_Dashboard` will provide a full, actionable restocking plan.
+    *   **Template Usage:** Paste the FBA Inventory and Business Report data into their respective `Data_Input` tabs. The `Restock_Dashboard` will provide a complete restocking plan.
 
 *   **Listing Health & Sentiment Report Template**
-    *   **Purpose:** Forges the `Listing_Health_Sentiment_Report.xlsx`, a structured framework for conducting deep-dive analysis. It turns a vague "freestyle" request into a rigorous, multi-source investigation tool.
+    *   **Purpose:** Generates the `Listing_Health_Sentiment_Report.xlsx`, a structured framework for in-depth listing analysis. It consolidates qualitative and quantitative data for comprehensive investigation.
     *   **Script:** `src/forge_sentiment_report.py`
     *   **Command:** `npm run forge:sentiment-report`
     *   **Output:** `excel_templates/Listing_Health_Sentiment_Report_v1.0.xlsx`
-    *   **Template Usage:** Paste data from VOC, Business Reports, and competitor analysis into the input tabs. Use the `ASIN_Deep_Dive` tab to consolidate findings and formulate a final recommendation.
+    *   **Template Usage:** Paste data from VOC, Business Reports, and competitor analysis into the input tabs. Use the `ASIN_Deep_Dive` tab to consolidate findings and formulate recommendations.
 
 *   **Surgical Strike Profitability Calculator**
-    *   **Purpose:** Forges the `Surgical_Strike_Calculator.xlsx`, a simple but ruthless tool designed to calculate the exact profitability of a proposed discount. It serves as a mathematical "truth machine" to prevent money-losing promotions.
+    *   **Purpose:** Generates the `Surgical_Strike_Calculator.xlsx`, a precision tool designed to assess the profitability of proposed promotional discounts.
     *   **Script:** `src/forge_calculator.py`
     *   **Command:** `npm run forge:promo-calculator`
     *   **Output:** `excel_templates/Surgical_Strike_Calculator_v1.0.xlsx`
-    *   **Template Usage:** Input the product's price, costs, fees, and a proposed discount percentage. The calculator will instantly display the final profit per unit and a "LOSING MONEY!" warning if applicable.
+    *   **Template Usage:** Input the product's price, costs, fees, and a proposed discount percentage. The calculator will instantly display the final profit per unit and highlight potential losses.
 
 ---

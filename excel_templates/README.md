@@ -1,8 +1,8 @@
-# Excel Templates Directory
+# Strategic Analysis Templates
 
-This directory contains the "Trojan Horse" suite of intelligent Excel templates. These tools are programmatically forged to automate complex Amazon analysis and guide strategic decision-making.
+This directory contains advanced Excel templates designed to automate complex Amazon data analysis and guide strategic decision-making. These tools provide structured frameworks for inventory management, profitability assessment, and competitive tracking.
 
-## 🛠️ Available Templates
+## 📊 Available Templates
 
 ### 1. [BUY_RECOMMENDATIONS.xlsx](./BUY_RECOMMENDATIONS.xlsx)
 - **Purpose:** Wholesale Buy Recommendation Engine.
@@ -29,9 +29,9 @@ This directory contains the "Trojan Horse" suite of intelligent Excel templates.
 - **Source Script:** `src/forge_restock_report.py`
 
 ### 5. [Surgical_Strike_Calculator_v1.0.xlsx](./Surgical_Strike_Calculator_v1.0.xlsx)
-- **Purpose:** Mathematical "truth machine" for promotion profitability.
-- **Function:** Calculates the exact financial impact of proposed discounts.
-- **Key Features:** Instantly exposes potential money-losing promotions by factoring in all costs, fees, and discount depths.
+- **Purpose:** Precision tool for assessing promotion profitability.
+- **Function:** Calculates the financial impact of proposed discounts.
+- **Key Features:** Factors in all costs and fees to determine net profit per unit and highlights potential losses.
 - **Source Script:** `src/forge_calculator.py`
 
 ## 📜 Legacy Templates
