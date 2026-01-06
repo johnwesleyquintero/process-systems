@@ -19,6 +19,10 @@
 #    - NA() and IFERROR() handling for cleaner mathematical outputs.
 
 import os
+import logging
+import json
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Optional
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Protection
 from openpyxl.styles.differential import DifferentialStyle
@@ -28,11 +32,116 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
-# --- CONFIG ---
-OUTPUT_DIR = "excel_templates"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "BUY_RECOMMENDATIONS.xlsx")
-MAX_ROWS = 200  # pre-fill rows for formulas
+# --- LOGGING ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# --- CONFIG & CONSTANTS ---
+class ExcelConstants:
+    """Centralized constants for Excel generation."""
+    DEFAULT_MAX_ROWS: int = 200
+    PASSWORD: str = "wesai"
+    OUTPUT_DIR: str = "excel_templates"
+    OUTPUT_FILE: str = os.path.join(OUTPUT_DIR, "BUY_RECOMMENDATIONS.xlsx")
+    
+    # Header Fill Colors
+    HEADER_COLOR: str = "FFD966"
+    SUMMARY_LABEL_COLOR: str = "D9D9D9"
+    SUMMARY_VALUE_COLOR: str = "F2F2F2"
+
+os.makedirs(ExcelConstants.OUTPUT_DIR, exist_ok=True)
+MAX_ROWS = ExcelConstants.DEFAULT_MAX_ROWS
+
+@dataclass
+class ColumnMapper:
+    """Manages column indexing and letter mapping for a worksheet."""
+    tab_name: str
+    headers: List[str]
+    _map: Dict[str, int] = field(default_factory=dict, init=False)
+    _letter_map: Dict[str, str] = field(default_factory=dict, init=False)
+
+    def __post_init__(self):
+        self._map = {h: i + 1 for i, h in enumerate(self.headers)}
+        self._letter_map = {h: get_column_letter(i + 1) for i, h in enumerate(self.headers)}
+
+    def get_index(self, header: str) -> int:
+        """Returns the 1-based index of a header."""
+        if header not in self._map:
+            logger.error(f"Header '{header}' not found in tab '{self.tab_name}'")
+            raise KeyError(f"Header '{header}' not found in tab '{self.tab_name}'. Available: {list(self._map.keys())}")
+        return self._map[header]
+
+    def get_letter(self, header: str) -> str:
+        """Returns the Excel column letter for a header."""
+        if header not in self._letter_map:
+            logger.error(f"Header '{header}' not found in tab '{self.tab_name}'")
+            raise KeyError(f"Header '{header}' not found in tab '{self.tab_name}'. Available: {list(self._letter_map.keys())}")
+        return self._letter_map[header]
+
+# --- FORMULA BUILDERS ---
+class FormulaBuilder:
+    """Helper for constructing common Excel formulas."""
+    @staticmethod
+    def vlookup(lookup_value: str, table_range: str, col_index: int, exact: bool = True, default: Any = 0) -> str:
+        """
+        Constructs a VLOOKUP formula wrapped in IFERROR.
+        
+        Args:
+            lookup_value: The cell reference or value to look up.
+            table_range: The range containing the lookup table (e.g., 'Sheet!$A:$C').
+            col_index: The column index in the table to return.
+            exact: Whether to perform an exact match.
+            default: The value to return if the lookup fails.
+        """
+        match_type = "FALSE" if exact else "TRUE"
+        return f'=IFERROR(VLOOKUP({lookup_value}, {table_range}, {col_index}, {match_type}), {default})'
+
+    @staticmethod
+    def match(lookup_val: str, lookup_range: str, match_type: int = 0) -> str:
+        """
+        Constructs a MATCH formula.
+        
+        Args:
+            lookup_val: The cell reference or value to find.
+            lookup_range: The range to search within.
+            match_type: 0 for exact, 1 for less than, -1 for greater than.
+        """
+        return f"MATCH({lookup_val}, {lookup_range}, {match_type})"
+
+    @staticmethod
+    def count_items_in_list(cell: str, delimiter: str = ",") -> str:
+        """
+        Constructs a formula to count items in a delimited string.
+        Useful for counting variation ASINs or other comma-separated lists.
+        """
+        return f"IF(ISBLANK({cell}), 1, LEN({cell}) - LEN(SUBSTITUTE({cell}, \"{delimiter}\", \"\")) + 1)"
+
+    @staticmethod
+    def if_blank(cell: str, value_if_blank: Any, value_if_not_blank: Any) -> str:
+        """Constructs an IF(ISBLANK(...)) formula."""
+        return f"IF(ISBLANK({cell}), {value_if_blank}, {value_if_not_blank})"
+
+    @staticmethod
+    def weighted_avg(components: List[tuple]) -> str:
+        """
+        Builds a weighted average formula that handles blanks and zeros gracefully.
+        
+        Args:
+            components: A list of (value_cell, weight_cell) tuples.
+        """
+        num = " + ".join([f"IFERROR({v}*{w},0)" for v, w in components])
+        den = " + ".join([f"IF({v}>0,{w},0)" for v, _ in components])
+        return f"IFERROR(({num})/({den}), 0)"
+
+class VLookupBuilder:
+    """Specialized builder for VLOOKUPs to a specific range."""
+    def __init__(self, table_range: str, default_val: Any = 0):
+        self.table_range = table_range
+        self.default_val = default_val
+
+    def build(self, lookup_cell: str, col_index: int, exact: bool = True, default_val: Optional[Any] = None) -> str:
+        default = default_val if default_val is not None else self.default_val
+        return FormulaBuilder.vlookup(lookup_cell, self.table_range, col_index, exact, default)
 
 # --- STYLES ---
 HEADER_FILL = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
@@ -55,152 +164,95 @@ GREEN_FILL = PatternFill(start_color="FFC6EFCE", end_color="FFC6EFCE", fill_type
 ORANGE_FONT = Font(color="FF9C6500")
 ORANGE_FILL = PatternFill(start_color="FFFFEB9C", end_color="FFFFEB9C", fill_type="solid")
 
-# --- Tabs and Headers ---
-TABS_CONFIG = {
-    "README": {
-        "header_row": 1,
-        "headers": ["Section", "Description / Logic"],
-        "content": [
-            ["AUTHOR", "John Wesley Quintero"],
-            ["USER GUIDE", "This workbook is used to calculate and recommend wholesale buys based on Amazon and Keepa data."],
-            ["BUY Tab", "Main decision sheet. Enter ASINs here to see order recommendations."],
-            ["AZInsight_Data Tab", "Raw data from AZInsight research tool. Paste your Amazon research exports here."],
-            ["KEEPA Tab", "Historical price and rank data. Paste Keepa data exports here."],
-            ["IP Qty Tab", "Inventory Planning data. Used for barcode lookups and stock levels."],
-            ["", ""],
-            ["CORE CALCULATIONS", "Key formulas used in this template:"],
-            ["Weighted BB Avg", "((30d Avg * 30wt) + (90d Avg * 90wt) + (180d Avg * 180wt)) / Total Weights"],
-            ["wtd avg", "If AMZ OOS >= 65%, use BB Avg. Otherwise, use MIN(BB Avg, AMZ Avg * (1 - AMZ Less))."],
-            ["Var. Opp.", "Estimated Sales * Variation Weight * (Target Days / 30). Adjusted by AMZ Boss multiplier if applicable."],
-            ["ROI/Profit", "Highlights 'OK' if ROI >= Min ROI AND Profit >= Min Profit thresholds."],
-            ["% Chng30/90", "(Avg BSR - Current BSR) / Avg BSR. Positive means rank is improving."],
-        ]
-    },
-    "BUY": {
-        "summary_labels": {
-            "A1": "Total Items", "C1": "Min Est Qty", "H1": "Min Sell Price", "I1": "Max BSR", 
-            "L1": "3PL / Unit", "O1": "Total Profit", "P1": "Overall ROI", "Q1": "Total Sales", 
-            "U1": "Max Order Qty", "V1": "Days of Stock", "W1": "Supplier Commission", "X1": "Discount", 
-            "Y1": "Total Units", "Z1": "Total Amount", "AA1": "AMZ Less", "AB1": "Case Pk Default", 
-            "AC1": "Min ROI", "AD1": "25%", "AE1": "20%", "AI1": "Max BSR 30", "AJ1": "Max Chng 30", 
-            "AK1": "Max BSR 90", "AL1": "Max Chng 90", "AM1": "Min Est Qty", "AN1": "Var Opp", 
-            "AO1": "Max AMZ OOS", "AP1": "Max Bbox OOS"
-        },
-        "summary_values": {
-            "B1": 0, "D1": 30, "H2": 9.00, "I2": 100000, "L2": 0.00, "O2": 0.00, "P2": 0.00, 
-            "Q2": 0.00, "U2": 240, "V2": 60, "W2": 0.00, "X2": 0.00, "Y2": 0, "Z2": 0.00, 
-            "AA2": 0.00, "AB2": 12, "AC2": 0.05, "AD2": 0.25, "AE2": 0.20, "AF2": "Min Profit", 
-            "AG2": 1.50, "AH2": 2.00, "AI2": 125000, "AJ2": 0.50, "AK2": 150000, "AL2": 0.75, 
-            "AM2": 300, "AN2": 0.07, "AO2": 0.35, "AP2": 0.50
-        },
-        "headers": [
-            "ASIN", "AMZ Title", "Est. Qty", "New FBA", "New MFN", "Total Offers", "Sell Price", 
-            "Current BSR", "Referral %", "S & H", "Proceeds", "Profit", "ROI", "Sales Opp.", 
-            "Suggested Pk", "Pack Qty", "Odr Qty (Pk)", "Item Code", "Description", "Cost", 
-            "Order Qty (Unit)", "Order Amount", "Var Weight", "Case Pack", "IP Qty", "Stock", 
-            "On Order", "Velocity", "Units Sold", "Offers 90d", "ROI/Profit", "Visible", 
-            "Var. Opp.", "Use Qty", "BSR 30 Avg", "% Chng30", "BSR 90 Avg", "% Chng90", 
-            "Avail. Qty", "AMZ Boss", "AMZ OOS", "Bbox OOS", "Brand", "Keepa Link", 
-            "AMZ Product Page", "Check Gated in SC", "Extra1", "Extra2", "Extra3"
-        ],
-        "header_row": 3
-    },
-    "AZInsight_Data": {
-        "summary_labels": {
-            "A1": "Total Items", "C1": "Matches Found on AMZ", "E1": "Not Found on AMZ"
-        },
-        "summary_values": {
-            "B1": f"=COUNTA(A4:A{3 + MAX_ROWS})", 
-            "D1": f"=COUNTIF(A4:A{3 + MAX_ROWS}, \"*?\")", 
-            "F1": "=B1-D1"
-        },
-        "headers": [
-            "ASIN", "Product ID", "Title", "Package Quantity", "Brand", "Product Group",
-            "Total Offers", "Sales Rank", "Estimated Number of Sales", "Profit", "Margin",
-            "ROI", "Purchase Price", "Sell Price", "Buy Box Landed", "Seller Proceeds",
-            "Low New Fba Price", "Low New Mfn Price", "Referral Fee", "Variable Closing Fee",
-            "Fulfillment Subtotal", "Cost Sub Total", "VAT %", "VAT $", "Inbound Shipping Estimate",
-            "Package Weight", "Package Height", "Package Length", "Package Width",
-            "New FBA Num Offers", "New MFN Num Offers", "Keepa", "CamelCC", "Size", "Last Run",
-            "Item Number", "PRODUCT", "SKU #", "Size(1)", "Case Pk", "Salon price / each",
-            "Salon price / case", "QTY", "YOUR TOTAL COST", "CASE COUNT"
-        ],
-        "header_row": 3
-    },
-    "ORDER": {
-        "headers": ["Item Code", "Description", "Unit Cost", "Order Qty", "Total Amount"],
-        "header_row": 1
-    },
-    "KEEPA": {
-        "summary_labels": {
-            "B1": "30 wt", "C1": "90 wt", "D1": "180 wt", "F1": "AMZ Less:"
-        },
-        "summary_values": {
-            "B2": 1, "C2": 3, "D2": 1, "F2": 0.05
-        },
-        "headers": [
-            "ASIN", "Baseline", "BB Avg", "AMZ Avg", "wtd avg", "Variations", "Review Wt", "Confidence",
-            "ASIN_SRC", "Title", "Buy Box: Current", "Buy Box: 30 days avg.", "Buy Box: 30 days drop %",
-            "Buy Box: 90 days avg.", "Buy Box: 90 days drop %", "Buy Box: 180 days avg.",
-            "Buy Box Seller", "Amazon: Current", "Amazon: 30 days avg.", "Amazon: 30 days drop %",
-            "Amazon: 90 days avg.", "Amazon: 90 days drop %", "Amazon: 180 days avg.",
-            "Amazon out of stock percentage: 90 days OOS %", "Sales Rank: Current", "Sales Rank: 30 days avg.",
-            "Sales Rank: 30 days drop %", "Sales Rank: 90 days avg.", "Sales Rank: 90 days drop %",
-            "Sales Rank: 180 days avg.", "Count of retrieved live offers: New, FBA",
-            "Count of retrieved live offers: New, FBM", "New Offer Count: Current", "New Offer Count: 90 days avg.",
-            "New, 3rd Party FBA: 30 days avg.", "New, 3rd Party FBA: 90 days avg.", "New, 3rd Party FBA: 180 days avg.",
-            "Variation ASINs", "Parent ASIN", "Reviews: Reviews - Format Specific", "Variation Attributes",
-            "Reviews: Review Count", "Model", "Number of Items", "Categories: Root", "FBA Fees:",
-            "Referral Fee %", "Buy Box out of stock percentage: 90 days OOS %"
-        ],
-        "header_row": 3
-    },
-    "IP Qty": {
-        "headers": [
-            "Image", "Name", "SKU", "Barcode", "Cost Price", "Price", "Replenishment", "To Order",
-            "Stock", "On Order", "Sales", "Adjusted Sales Velocity/mo", "Lead Time", "Days of Stock",
-            "Vendors", "Brand", "AVG Retail Price", "Replenishable", "In Buy Sheet?"
-        ],
-        "header_row": 1
-    }
-}
+# --- VALIDATORS ---
+class ConfigValidator:
+    """Validates the tab configuration for consistency and completeness."""
+    @staticmethod
+    def validate(config: Dict[str, Any]):
+        required_tabs = ["BUY", "AZInsight_Data", "KEEPA", "IP Qty"]
+        for tab in required_tabs:
+            if tab not in config:
+                raise ValueError(f"Missing required tab configuration: {tab}")
+            
+            tab_cfg = config[tab]
+            if "headers" not in tab_cfg:
+                raise ValueError(f"Tab '{tab}' is missing 'headers'")
+            if "header_row" not in tab_cfg:
+                raise ValueError(f"Tab '{tab}' is missing 'header_row'")
+            
+            # Check for unique headers
+            headers = tab_cfg["headers"]
+            if len(headers) != len(set(headers)):
+                duplicates = [h for h in headers if headers.count(h) > 1]
+                raise ValueError(f"Duplicate headers found in tab '{tab}': {set(duplicates)}")
+
+        # Check for specific required headers for core logic
+        required_headers = {
+            "BUY": ["ASIN", "Cost", "Sell Price", "Profit", "ROI"],
+            "AZInsight_Data": ["ASIN", "Sales Rank", "Estimated Number of Sales"],
+            "KEEPA": ["ASIN", "BB Avg", "AMZ Avg"],
+            "IP Qty": ["Barcode", "In Buy Sheet?"]
+        }
+        
+        for tab, headers in required_headers.items():
+            for header in headers:
+                if header not in config[tab]["headers"]:
+                    raise ValueError(f"Required header '{header}' missing from tab '{tab}'")
+
+        logger.info("Configuration validation successful.")
+
+# --- CONFIG LOADING ---
+def load_config(file_path: str, max_rows: int) -> Dict[str, Any]:
+    """Loads and interpolates the tab configuration from a JSON file."""
+    with open(file_path, 'r') as f:
+        config_str = f.read()
+    
+    # Interpolate dynamic values
+    config_str = config_str.replace("{{MAX_ROWS}}", str(max_rows))
+    config_str = config_str.replace("{{MAX_ROWS_PLUS_3}}", str(max_rows + 3))
+    
+    return json.loads(config_str)
+
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+TABS_CONFIG = load_config(CONFIG_PATH, ExcelConstants.DEFAULT_MAX_ROWS)
+ConfigValidator.validate(TABS_CONFIG)
 
 # --- Column Mapping Cache ---
-COLUMN_MAPS = {}
+MAPPERS: Dict[str, ColumnMapper] = {
+    tab: ColumnMapper(tab, config["headers"]) 
+    for tab, config in TABS_CONFIG.items() 
+    if "headers" in config
+}
 
-def get_col(tab_name, header_name):
+def get_col(tab_name: str, header_name: str) -> str:
     """
     Returns the Excel column letter for a given header name within a specific tab.
-    Uses a cache for performance and safety.
+    Uses the pre-initialized ColumnMapper objects.
     """
-    if tab_name not in TABS_CONFIG:
-        raise ValueError(f"Tab '{tab_name}' not found in TABS_CONFIG.")
+    if tab_name not in MAPPERS:
+        raise ValueError(f"Tab '{tab_name}' not found in MAPPERS.")
     
-    if tab_name not in COLUMN_MAPS:
-        headers = TABS_CONFIG[tab_name]["headers"]
-        COLUMN_MAPS[tab_name] = {h: get_column_letter(i + 1) for i, h in enumerate(headers)}
-    
-    if header_name not in COLUMN_MAPS[tab_name]:
-        raise KeyError(f"Header '{header_name}' not found in tab '{tab_name}'. Available: {list(COLUMN_MAPS[tab_name].keys())}")
-    
-    return COLUMN_MAPS[tab_name][header_name]
+    return MAPPERS[tab_name].get_letter(header_name)
 
 # --- HELPER FUNCTIONS ---
-def setup_sheet(ws, tab_config):
+def setup_sheet(ws, tab_config: Dict[str, Any]):
     """
     Sets up headers, formatting, filters, and frozen panes for a worksheet.
     """
     headers = tab_config["headers"]
     header_row = tab_config["header_row"]
     
+    logger.info(f"Setting up sheet: {ws.title}")
+
     # 1. Write Headers
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=header_row, column=col_idx, value=header)
-        cell.fill = HEADER_FILL
+        cell.fill = PatternFill(start_color=ExcelConstants.HEADER_COLOR, 
+                                end_color=ExcelConstants.HEADER_COLOR, fill_type="solid")
         cell.font = BOLD_FONT
         cell.alignment = WRAPPED_CENTER_ALIGN
         
-        # Apply Column Widths (Reverse Engineered / Heuristic)
+        # Apply Column Widths
         col_letter = get_column_letter(col_idx)
         h_lower = header.lower()
         if ws.title == "README":
@@ -232,38 +284,33 @@ def setup_sheet(ws, tab_config):
         for row_idx in range(header_row + 1, header_row + MAX_ROWS + 1):
             ws.cell(row=row_idx, column=col_idx).number_format = fmt
 
-    # 2. Enable AutoFilter on the header row
+    # 2. Enable AutoFilter
     last_col = get_column_letter(len(headers))
     ws.auto_filter.ref = f"A{header_row}:{last_col}{header_row + MAX_ROWS}"
 
     # 3. Cell Protection Strategy
-    # By default, openpyxl cells are locked. We need to unlock columns meant for user input.
     if ws.title != "README":
         input_keywords = ["asin", "title", "cost", "case pack", "extra", "product id", "qty", "sku", "barcode", "replenishment", "lead time"]
         for col_idx, header in enumerate(headers, 1):
             h_lower = header.lower()
-            # If it's a known input field, unlock the whole data range
-            if any(kw in h_lower for kw in input_keywords) and "avg" not in h_lower and "oos" not in h_lower:
-                for row_idx in range(header_row + 1, header_row + MAX_ROWS + 1):
-                    ws.cell(row=row_idx, column=col_idx).protection = UNLOCKED
-            else:
-                # Explicitly lock others (just to be safe)
-                for row_idx in range(header_row + 1, header_row + MAX_ROWS + 1):
-                    ws.cell(row=row_idx, column=col_idx).protection = LOCKED
+            is_input = any(kw in h_lower for kw in input_keywords) and "avg" not in h_lower and "oos" not in h_lower
+            protection = UNLOCKED if is_input else LOCKED
+            for row_idx in range(header_row + 1, header_row + MAX_ROWS + 1):
+                ws.cell(row=row_idx, column=col_idx).protection = protection
 
-    # 4. Freeze Panes (Standardized for Wholesale Review)
+    # 4. Freeze Panes
     if ws.title in ["BUY", "AZInsight_Data", "KEEPA"]:
-        # Freeze top rows (up to header) and first column (usually ASIN)
         ws.freeze_panes = ws.cell(row=header_row + 1, column=2)
     elif ws.title == "IP Qty":
         ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
 
-    # 4. Summary Labels and Values (if any)
+    # 5. Summary Labels and Values
     if "summary_labels" in tab_config:
         for cell_ref, label in tab_config["summary_labels"].items():
             cell = ws[cell_ref]
             cell.value = label
-            cell.fill = SUMMARY_LABEL_FILL
+            cell.fill = PatternFill(start_color=ExcelConstants.SUMMARY_LABEL_COLOR, 
+                                    end_color=ExcelConstants.SUMMARY_LABEL_COLOR, fill_type="solid")
             cell.font = BOLD_FONT
             cell.alignment = CENTER_ALIGN
             
@@ -271,28 +318,28 @@ def setup_sheet(ws, tab_config):
         for cell_ref, val in tab_config["summary_values"].items():
             cell = ws[cell_ref]
             cell.value = val
-            cell.fill = SUMMARY_VALUE_FILL
+            cell.fill = PatternFill(start_color=ExcelConstants.SUMMARY_VALUE_COLOR, 
+                                    end_color=ExcelConstants.SUMMARY_VALUE_COLOR, fill_type="solid")
             cell.alignment = CENTER_ALIGN
-            # Summary values are usually locked unless they are specific inputs like weights
+            
+            # Unlock specific input cells in summary
             if ws.title in ["BUY", "KEEPA"] and cell_ref in ["B2", "C2", "D2", "F2", "L2", "Q2", "R2", "S2", "T2"]:
                 cell.protection = UNLOCKED
             else:
                 cell.protection = LOCKED
                 
-            # Format numeric summary values
             if isinstance(val, (int, float)):
-                if val < 1 and val > 0: # likely a percentage
+                if 0 < val < 1:
                     cell.number_format = '0.00%'
                 elif val > 1000:
                     cell.number_format = '#,##0'
                 else:
                     cell.number_format = '0.00'
 
-    # 6. Enable Sheet Protection with password
+    # 6. Enable Sheet Protection
     ws.protection.sheet = True
-    ws.protection.password = "wesai"
-    # Allow filtering even when protected
-    ws.protection.autoFilter = False # In openpyxl, setting to False actually ALLOWS it if it was already set
+    ws.protection.password = ExcelConstants.PASSWORD
+    ws.protection.autoFilter = False
 
 # --- INIT WORKBOOK ---
 wb = Workbook()
@@ -372,70 +419,72 @@ b_keepa_link = get_col("BUY", 'Keepa Link')
 b_amz_link = get_col("BUY", 'AMZ Product Page')
 b_gated = get_col("BUY", 'Check Gated in SC')
 
-# Lookup Indices for AZInsight_Data
-res_h = TABS_CONFIG["AZInsight_Data"]["headers"]
-r_sell_price_idx = res_h.index("Sell Price") + 1
-r_bsr_idx = res_h.index("Sales Rank") + 1
-r_cost_idx = res_h.index("Purchase Price") + 1
-r_opp_idx = res_h.index("Estimated Number of Sales") + 1
-r_brand_idx = res_h.index("Brand") + 1
-r_title_idx = res_h.index("Title") + 1
-r_fba_idx = res_h.index("Low New Fba Price") + 1
-r_mfn_idx = res_h.index("Low New Mfn Price") + 1
-r_offers_idx = res_h.index("Total Offers") + 1
-r_referral_idx = res_h.index("Referral Fee") + 1
-r_proceeds_idx = res_h.index("Seller Proceeds") + 1
-r_sh_idx = res_h.index("Inbound Shipping Estimate") + 1
-r_case_pk_idx = res_h.index("Case Pk") + 1
-r_item_num_idx = res_h.index("Item Number") + 1
-r_size_idx = res_h.index("Size") + 1
+# --- LOOKUP INDICES ---
+res_mapper = MAPPERS["AZInsight_Data"]
+r_sell_price_idx = res_mapper.get_index("Sell Price")
+r_bsr_idx = res_mapper.get_index("Sales Rank")
+r_cost_idx = res_mapper.get_index("Purchase Price")
+r_opp_idx = res_mapper.get_index("Estimated Number of Sales")
+r_brand_idx = res_mapper.get_index("Brand")
+r_title_idx = res_mapper.get_index("Title")
+r_fba_idx = res_mapper.get_index("Low New Fba Price")
+r_mfn_idx = res_mapper.get_index("Low New Mfn Price")
+r_offers_idx = res_mapper.get_index("Total Offers")
+r_referral_idx = res_mapper.get_index("Referral Fee")
+r_proceeds_idx = res_mapper.get_index("Seller Proceeds")
+r_sh_idx = res_mapper.get_index("Inbound Shipping Estimate")
+r_case_pk_idx = res_mapper.get_index("Case Pk")
+r_item_num_idx = res_mapper.get_index("Item Number")
+r_size_idx = res_mapper.get_index("Size")
 
-# Lookup Indices for KEEPA
-kee_h = TABS_CONFIG["KEEPA"]["headers"]
-k_bsr30_idx = kee_h.index("Sales Rank: 30 days avg.") + 1
-k_bsr90_idx = kee_h.index("Sales Rank: 90 days avg.") + 1
-k_offers90_idx = kee_h.index("New Offer Count: 90 days avg.") + 1
-k_amz_oos_idx = kee_h.index("Amazon out of stock percentage: 90 days OOS %") + 1
-k_bbox_oos_idx = kee_h.index("Buy Box out of stock percentage: 90 days OOS %") + 1
-k_baseline_idx = kee_h.index("Baseline") + 1
-k_referral_idx = kee_h.index("Referral Fee %") + 1
+kee_mapper = MAPPERS["KEEPA"]
+k_bsr30_idx = kee_mapper.get_index("Sales Rank: 30 days avg.")
+k_bsr90_idx = kee_mapper.get_index("Sales Rank: 90 days avg.")
+k_offers90_idx = kee_mapper.get_index("New Offer Count: 90 days avg.")
+k_amz_oos_idx = kee_mapper.get_index("Amazon out of stock percentage: 90 days OOS %")
+k_bbox_oos_idx = kee_mapper.get_index("Buy Box out of stock percentage: 90 days OOS %")
+k_baseline_idx = kee_mapper.get_index("Baseline")
+k_referral_idx = kee_mapper.get_index("Referral Fee %")
 
-# Lookup Indices for IP Qty
-ip_h = TABS_CONFIG["IP Qty"]["headers"]
-ip_barcode_idx = ip_h.index("Barcode") + 1
-ip_to_order_idx = ip_h.index("To Order") + 1
-ip_stock_idx = ip_h.index("Stock") + 1
-ip_on_order_idx = ip_h.index("On Order") + 1
-ip_sales_idx = ip_h.index("Sales") + 1
-ip_velocity_idx = ip_h.index("Adjusted Sales Velocity/mo") + 1
+ip_mapper = MAPPERS["IP Qty"]
+ip_barcode_idx = ip_mapper.get_index("Barcode")
+ip_to_order_idx = ip_mapper.get_index("To Order")
+ip_stock_idx = ip_mapper.get_index("Stock")
+ip_on_order_idx = ip_mapper.get_index("On Order")
+ip_sales_idx = ip_mapper.get_index("Sales")
+ip_velocity_idx = ip_mapper.get_index("Adjusted Sales Velocity/mo")
+
+# --- FORMULA BUILDERS ---
+vlookup_res = VLookupBuilder("AZInsight_Data!$A:$AS", 0)
+vlookup_kee = VLookupBuilder("KEEPA!$A:$AW", 0)
+vlookup_ip = VLookupBuilder("IP Qty!$D:$R", 0) # Barcode is column D
 
 for row in range(start_row, start_row + MAX_ROWS):
     asin_ref = f"{b_asin}{row}"
     
-    # AZInsight_Data Tab Lookups (Wrapped in IFERROR)
-    res_range = "AZInsight_Data!$A:$AS"
-    buy_ws[f"{b_est_qty}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_opp_idx}, FALSE), 0)'
-    buy_ws[f"{b_sell}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_sell_price_idx}, FALSE), 0)'
-    buy_ws[f"{b_bsr}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_bsr_idx}, FALSE), 0)'
-    buy_ws[f"{b_cost}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_cost_idx}, FALSE), 0)'
+    # AZInsight_Data Tab Lookups
+    buy_ws[f"{b_est_qty}{row}"] = vlookup_res.build(asin_ref, r_opp_idx)
+    buy_ws[f"{b_sell}{row}"] = vlookup_res.build(asin_ref, r_sell_price_idx)
+    buy_ws[f"{b_bsr}{row}"] = vlookup_res.build(asin_ref, r_bsr_idx)
+    buy_ws[f"{b_cost}{row}"] = vlookup_res.build(asin_ref, r_cost_idx)
     
     # AMZ Title Lookup from AZInsight_Data Tab
-    buy_ws[f"{b_amz_title}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_title_idx}, FALSE), "")'
+    buy_ws[f"{b_amz_title}{row}"] = vlookup_res.build(asin_ref, r_title_idx, default_val='""')
 
     # Financial & Offer Lookups from AZInsight_Data Tab
-    buy_ws[f"{b_fba}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_fba_idx}, FALSE), 0)'
-    buy_ws[f"{b_mfn}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_mfn_idx}, FALSE), 0)'
-    buy_ws[f"{b_offers}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_offers_idx}, FALSE), 0)'
-    buy_ws[f"{b_proceeds}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_proceeds_idx}, FALSE), 0)'
-    buy_ws[f"{b_sh}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_sh_idx}, FALSE), 0)'
-    buy_ws[f"{b_sugg_pk}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_case_pk_idx}, FALSE), 1)'
-    buy_ws[f"{b_item_code}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_item_num_idx}, FALSE), "")'
-    buy_ws[f"{b_case_pack}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_case_pk_idx}, FALSE), 1)'
-    buy_ws[f"{b_avail}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_size_idx}, FALSE), 0)'
-    buy_ws[f"{b_desc}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_title_idx}, FALSE), "")'
+    buy_ws[f"{b_fba}{row}"] = vlookup_res.build(asin_ref, r_fba_idx)
+    buy_ws[f"{b_mfn}{row}"] = vlookup_res.build(asin_ref, r_mfn_idx)
+    buy_ws[f"{b_offers}{row}"] = vlookup_res.build(asin_ref, r_offers_idx)
+    buy_ws[f"{b_proceeds}{row}"] = vlookup_res.build(asin_ref, r_proceeds_idx)
+    buy_ws[f"{b_sh}{row}"] = vlookup_res.build(asin_ref, r_sh_idx)
+    buy_ws[f"{b_sugg_pk}{row}"] = vlookup_res.build(asin_ref, r_case_pk_idx, default_val=1)
+    buy_ws[f"{b_item_code}{row}"] = vlookup_res.build(asin_ref, r_item_num_idx, default_val='""')
+    buy_ws[f"{b_case_pack}{row}"] = vlookup_res.build(asin_ref, r_case_pk_idx, default_val=1)
+    buy_ws[f"{b_avail}{row}"] = vlookup_res.build(asin_ref, r_size_idx)
+    buy_ws[f"{b_desc}{row}"] = vlookup_res.build(asin_ref, r_title_idx, default_val='""')
 
     # Referral % from KEEPA (more accurate for percentage)
-    buy_ws[f"{b_referral}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, KEEPA!$A:$AW, {k_referral_idx}, FALSE), 0)'
+    buy_ws[f"{b_referral}{row}"] = vlookup_kee.build(asin_ref, k_referral_idx)
 
     # Pack Qty Logic
     buy_ws[f"{b_pk_qty}{row}"] = f'=IF({b_sugg_pk}{row}>0, {b_sugg_pk}{row}, 1)'
@@ -445,21 +494,21 @@ for row in range(start_row, start_row + MAX_ROWS):
     buy_ws[f"{b_profit}{row}"] = f"=IFERROR({b_proceeds}{row}-{b_cost}{row}-{b_sh}{row}, 0)"
     buy_ws[f"{b_roi}{row}"] = f"=IFERROR(IF({b_cost}{row}=0, 0, {b_profit}{row}/{b_cost}{row}), 0)"
 
-    # KEEPA Tab Lookups (Wrapped in IFERROR)
-    kee_range = "KEEPA!$A:$AW"
-    buy_ws[f"{b_bsr30}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {kee_range}, {k_bsr30_idx}, FALSE), 0)'
-    buy_ws[f"{b_bsr90}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {kee_range}, {k_bsr90_idx}, FALSE), 0)'
-    buy_ws[f"{b_offers_90d}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {kee_range}, {k_offers90_idx}, FALSE), 0)'
-    buy_ws[f"{b_amz_oos}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {kee_range}, {k_amz_oos_idx}, FALSE), 0)'
-    buy_ws[f"{b_bbox_oos}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {kee_range}, {k_bbox_oos_idx}, FALSE), 0)'
+    # KEEPA Tab Lookups
+    buy_ws[f"{b_bsr30}{row}"] = vlookup_kee.build(asin_ref, k_bsr30_idx)
+    buy_ws[f"{b_bsr90}{row}"] = vlookup_kee.build(asin_ref, k_bsr90_idx)
+    buy_ws[f"{b_offers_90d}{row}"] = vlookup_kee.build(asin_ref, k_offers90_idx)
+    buy_ws[f"{b_amz_oos}{row}"] = vlookup_kee.build(asin_ref, k_amz_oos_idx)
+    buy_ws[f"{b_bbox_oos}{row}"] = vlookup_kee.build(asin_ref, k_bbox_oos_idx)
 
     # IP Qty Tab Lookups (Using ASIN as lookup value per legacy logic)
-    ip_range = "IP Qty!$D:$R" # Barcode is column D
-    buy_ws[f"{b_ip_qty}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {ip_range}, {ip_to_order_idx - ip_barcode_idx + 1}, FALSE), 0)'
-    buy_ws[f"{b_stock}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {ip_range}, {ip_stock_idx - ip_barcode_idx + 1}, FALSE), 0)'
-    buy_ws[f"{b_on_order}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {ip_range}, {ip_on_order_idx - ip_barcode_idx + 1}, FALSE), 0)'
-    buy_ws[f"{b_velocity}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {ip_range}, {ip_velocity_idx - ip_barcode_idx + 1}, FALSE), 0)'
-    buy_ws[f"{b_units_sold}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {ip_range}, {ip_sales_idx - ip_barcode_idx + 1}, FALSE), 0)'
+    # Note: Barcode is column D (index 4), so offset from D is (target_idx - 4 + 1)
+    ip_offset = ip_barcode_idx - 1
+    buy_ws[f"{b_ip_qty}{row}"] = vlookup_ip.build(asin_ref, ip_to_order_idx - ip_offset)
+    buy_ws[f"{b_stock}{row}"] = vlookup_ip.build(asin_ref, ip_stock_idx - ip_offset)
+    buy_ws[f"{b_on_order}{row}"] = vlookup_ip.build(asin_ref, ip_on_order_idx - ip_offset)
+    buy_ws[f"{b_velocity}{row}"] = vlookup_ip.build(asin_ref, ip_velocity_idx - ip_offset)
+    buy_ws[f"{b_units_sold}{row}"] = vlookup_ip.build(asin_ref, ip_sales_idx - ip_offset)
 
     # Trends (Wrapped in IFERROR)
     buy_ws[f"{b_chng30}{row}"] = f"=IFERROR(IF({b_bsr30}{row}=0, 0, ({b_bsr30}{row}-{b_bsr}{row})/{b_bsr}{row}), 0)"
@@ -489,8 +538,8 @@ for row in range(start_row, start_row + MAX_ROWS):
     # Odr Qty (Pk)
     buy_ws[f"{b_odr_pk}{row}"] = f"=IFERROR({b_units}{row}/{b_pk_qty}{row}, 0)"
 
-    # Brand Lookup from AZInsight_Data Tab (Wrapped in IFERROR)
-    buy_ws[f"{b_brand}{row}"] = f'=IFERROR(VLOOKUP({asin_ref}, {res_range}, {r_brand_idx}, FALSE), "")'
+    # Brand Lookup from AZInsight_Data Tab
+    buy_ws[f"{b_brand}{row}"] = vlookup_res.build(asin_ref, r_brand_idx, default_val='""')
 
     # Hyperlinks
     buy_ws[f"{b_keepa_link}{row}"] = f'=IF(OR({asin_ref}="", {asin_ref}=0), "", HYPERLINK("https://keepa.com/#!product/1-"&{asin_ref}, "Keepa"))'
@@ -499,7 +548,8 @@ for row in range(start_row, start_row + MAX_ROWS):
 
     # AMZ Boss (Legacy logic)
     # AND(VLOOKUP(...)<=$AO$2, Est. Qty >= $AM$2)
-    buy_ws[f"{b_amz_boss}{row}"] = f'=IFERROR(AND(VLOOKUP({asin_ref}, KEEPA!$A:$AW, {k_baseline_idx}, FALSE)<=$AO$2, {b_opp}{row} >= $AM$2), FALSE)'
+    baseline_lookup = vlookup_kee.build(asin_ref, k_baseline_idx)
+    buy_ws[f"{b_amz_boss}{row}"] = f'=IFERROR(AND({baseline_lookup}<=$AO$2, {b_opp}{row} >= $AM$2), FALSE)'
 
     # ROI/Profit (Legacy Complex Logic)
     # Tiers based on Summary Values
@@ -547,66 +597,66 @@ w180 = "$D$2"
 amz_less = "$F$2"
 
 # Map KEEPA headers to columns
-k_asin = get_col("KEEPA", "ASIN")
-k_baseline = get_col("KEEPA", "Baseline")
-k_bb_avg = get_col("KEEPA", "BB Avg")
-k_amz_avg = get_col("KEEPA", "AMZ Avg")
-k_wtd_avg = get_col("KEEPA", "wtd avg")
-k_vars = get_col("KEEPA", "Variations")
-k_rev_wt = get_col("KEEPA", "Review Wt")
-k_conf = get_col("KEEPA", "Confidence")
+keepa_mapper = MAPPERS["KEEPA"]
+k_asin = keepa_mapper.get_letter("ASIN")
+k_baseline = keepa_mapper.get_letter("Baseline")
+k_bb_avg = keepa_mapper.get_letter("BB Avg")
+k_amz_avg = keepa_mapper.get_letter("AMZ Avg")
+k_wtd_avg = keepa_mapper.get_letter("wtd avg")
+k_vars = keepa_mapper.get_letter("Variations")
+k_rev_wt = keepa_mapper.get_letter("Review Wt")
+k_conf = keepa_mapper.get_letter("Confidence")
 
 # Data columns from KEEPA tab
-k_bb_30 = get_col("KEEPA", "Buy Box: 30 days avg.")
-k_bb_90 = get_col("KEEPA", "Buy Box: 90 days avg.")
-k_bb_180 = get_col("KEEPA", "Buy Box: 180 days avg.")
-k_bb_curr = get_col("KEEPA", "Buy Box: Current")
+k_bb_30 = keepa_mapper.get_letter("Buy Box: 30 days avg.")
+k_bb_90 = keepa_mapper.get_letter("Buy Box: 90 days avg.")
+k_bb_180 = keepa_mapper.get_letter("Buy Box: 180 days avg.")
+k_bb_curr = keepa_mapper.get_letter("Buy Box: Current")
 
-k_amz_30 = get_col("KEEPA", "Amazon: 30 days avg.")
-k_amz_90 = get_col("KEEPA", "Amazon: 90 days avg.")
-k_amz_180 = get_col("KEEPA", "Amazon: 180 days avg.")
-k_amz_curr = get_col("KEEPA", "Amazon: Current")
-k_amz_oos = get_col("KEEPA", "Amazon out of stock percentage: 90 days OOS %")
+k_amz_30 = keepa_mapper.get_letter("Amazon: 30 days avg.")
+k_amz_90 = keepa_mapper.get_letter("Amazon: 90 days avg.")
+k_amz_180 = keepa_mapper.get_letter("Amazon: 180 days avg.")
+k_amz_curr = keepa_mapper.get_letter("Amazon: Current")
+k_amz_oos = keepa_mapper.get_letter("Amazon out of stock percentage: 90 days OOS %")
 
-k_var_asins = get_col("KEEPA", "Variation ASINs")
-k_parent = get_col("KEEPA", "Parent ASIN")
-k_rev_fmt = get_col("KEEPA", "Reviews: Reviews - Format Specific")
+k_var_asins = keepa_mapper.get_letter("Variation ASINs")
+k_parent = keepa_mapper.get_letter("Parent ASIN")
+k_rev_fmt = keepa_mapper.get_letter("Reviews: Reviews - Format Specific")
 
 for row in range(start_row_keepa, start_row_keepa + MAX_ROWS):
     # Baseline
     keepa_ws[f"{k_baseline}{row}"] = f'=IF(ISBLANK({k_amz_oos}{row}),0,IF({k_amz_oos}{row}>=0.65, "BB", "AMZ"))'
     
-    # Robust Weighted Average using SUMPRODUCT-style logic (handles blanks/zeros)
-    # BB Avg
-    bb_num = f"SUM(IFERROR({k_bb_30}{row}*{w30},0), IFERROR({k_bb_90}{row}*{w90},0), IFERROR({k_bb_180}{row}*{w180},0))"
-    bb_den = f"SUM(IF({k_bb_30}{row}>0,{w30},0), IF({k_bb_90}{row}>0,{w90},0), IF({k_bb_180}{row}>0,{w180},0))"
-    keepa_ws[f"{k_bb_avg}{row}"] = f"=IF(AND({k_bb_30}{row}<{k_bb_90}{row},{k_bb_30}{row}<{k_bb_180}{row}), MIN({k_bb_30}{row},{k_bb_curr}{row}), IFERROR({bb_num}/{bb_den}, 0))"
+    # Robust Weighted Average logic
+    bb_components = [(f"{k_bb_30}{row}", w30), (f"{k_bb_90}{row}", w90), (f"{k_bb_180}{row}", w180)]
+    bb_avg_formula = FormulaBuilder.weighted_avg(bb_components)
+    keepa_ws[f"{k_bb_avg}{row}"] = f"=IF(AND({k_bb_30}{row}<{k_bb_90}{row},{k_bb_30}{row}<{k_bb_180}{row}), MIN({k_bb_30}{row},{k_bb_curr}{row}), {bb_avg_formula})"
     
-    # AMZ Avg
-    amz_num = f"SUM(IFERROR({k_amz_30}{row}*{w30},0), IFERROR({k_amz_90}{row}*{w90},0), IFERROR({k_amz_180}{row}*{w180},0))"
-    amz_den = f"SUM(IF({k_amz_30}{row}>0,{w30},0), IF({k_amz_90}{row}>0,{w90},0), IF({k_amz_180}{row}>0,{w180},0))"
-    keepa_ws[f"{k_amz_avg}{row}"] = f"=IF(AND({k_amz_30}{row}<{k_amz_90}{row},{k_amz_30}{row}<{k_amz_180}{row}), MIN({k_amz_30}{row},{k_amz_curr}{row}), IFERROR({amz_num}/{amz_den}, 0))"
+    amz_components = [(f"{k_amz_30}{row}", w30), (f"{k_amz_90}{row}", w90), (f"{k_amz_180}{row}", w180)]
+    amz_avg_formula = FormulaBuilder.weighted_avg(amz_components)
+    keepa_ws[f"{k_amz_avg}{row}"] = f"=IF(AND({k_amz_30}{row}<{k_amz_90}{row},{k_amz_30}{row}<{k_amz_180}{row}), MIN({k_amz_30}{row},{k_amz_curr}{row}), {amz_avg_formula})"
     
     # wtd avg
     keepa_ws[f"{k_wtd_avg}{row}"] = f'=IF({k_baseline}{row}="BB",{k_bb_avg}{row},MIN({k_bb_avg}{row},{k_amz_avg}{row}*(1-{amz_less})))'
     
     # Variations count
-    keepa_ws[f"{k_vars}{row}"] = f'=IF(ISBLANK({k_var_asins}{row}),1,LEN({k_var_asins}{row})-LEN(SUBSTITUTE({k_var_asins}{row},",",""))+1)'
+    keepa_ws[f"{k_vars}{row}"] = f'={FormulaBuilder.count_items_in_list(f"{k_var_asins}{row}")}'
     
     # Review Weight (simplified legacy logic)
     keepa_ws[f"{k_rev_wt}{row}"] = f'=IF({k_vars}{row}=1,1,IF(OR(ISBLANK({k_rev_fmt}{row}),{k_rev_fmt}{row}=0),"Manual",{k_rev_fmt}{row}/MAX(SUMIF($AK:$AK,{k_parent}{row},$AL:$AL),1)))'
 
-    # Confidence (Using 1/0 for downstream math as suggested)
+    # Confidence
     keepa_ws[f"{k_conf}{row}"] = f"=IF({k_vars}{row}=1, 1, 0)"
 
 # --- AZInsight_Data TAB CONDITIONAL FORMATTING ---
 res_ws = wb["AZInsight_Data"]
+res_mapper = MAPPERS["AZInsight_Data"]
 start_row_res = TABS_CONFIG["AZInsight_Data"]["header_row"] + 1
-r_rank = get_col("AZInsight_Data", "Sales Rank")
-r_sales = get_col("AZInsight_Data", "Estimated Number of Sales")
-r_profit = get_col("AZInsight_Data", "Profit")
-r_margin = get_col("AZInsight_Data", "Margin")
-r_roi = get_col("AZInsight_Data", "ROI")
+r_rank = res_mapper.get_letter("Sales Rank")
+r_sales = res_mapper.get_letter("Estimated Number of Sales")
+r_profit = res_mapper.get_letter("Profit")
+r_margin = res_mapper.get_letter("Margin")
+r_roi = res_mapper.get_letter("ROI")
 
 # 1. Sales Rank highlight (Orange if 100k-200k)
 res_ws.conditional_formatting.add(
@@ -647,14 +697,18 @@ buy_ws["P2"] = f"=SUM({b_amount}{start_row}:{b_amount}{start_row + MAX_ROWS})"
 
 # --- IP Qty TAB FORMULA INJECTION ---
 ip_ws = wb["IP Qty"]
+ip_mapper = MAPPERS["IP Qty"]
 start_row_ip = TABS_CONFIG["IP Qty"]["header_row"] + 1
-ip_barcode = get_col("IP Qty", "Barcode")
-ip_in_buy = get_col("IP Qty", "In Buy Sheet?")
+ip_barcode = ip_mapper.get_letter("Barcode")
+ip_in_buy = ip_mapper.get_letter("In Buy Sheet?")
+
+# Get BUY tab ASIN column letter for MATCH
+buy_asin_col = MAPPERS["BUY"].get_letter("ASIN")
 
 for row in range(start_row_ip, start_row_ip + MAX_ROWS):
     # Check if Barcode is in BUY tab ASIN column
-    # Formula: IF(ISERROR(MATCH(Barcode, BUY!ASIN_Col, 0)), "No", "YES")
-    ip_ws[f"{ip_in_buy}{row}"] = f'=IF(ISERROR(MATCH({ip_barcode}{row}, BUY!$A:$A, 0)), "No", "YES")'
+    match_formula = FormulaBuilder.match(f"{ip_barcode}{row}", f"BUY!${buy_asin_col}:${buy_asin_col}", 0)
+    ip_ws[f"{ip_in_buy}{row}"] = f'=IF(ISERROR({match_formula}), "No", "YES")'
 
 # --- ORDER TAB LOGIC (Pivot-style Summary) ---
 order_ws = wb["ORDER"]
@@ -695,10 +749,9 @@ buy_ws.add_table(buy_table)
 
     # --- SAVE WORKBOOK ---
 try:
-    wb.save(OUTPUT_FILE)
-    print(f"✅ BUY recommendation workbook generated with legacy improvements: {OUTPUT_FILE}")
+    wb.save(ExcelConstants.OUTPUT_FILE)
+    logger.info(f"BUY recommendation workbook generated: {ExcelConstants.OUTPUT_FILE}")
 except PermissionError:
-    print(f"❌ ERROR: Could not save to {OUTPUT_FILE}.")
-    print("👉 Please CLOSE the Excel file if it's currently open and try again.")
+    logger.error(f"Could not save to {ExcelConstants.OUTPUT_FILE}. File is open.")
 except Exception as e:
-    print(f"❌ AN UNEXPECTED ERROR OCCURRED: {e}")
+    logger.exception(f"Unexpected error during save: {e}")

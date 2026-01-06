@@ -1,0 +1,337 @@
+{
+  "README": {
+    "header_row": 1,
+    "headers": [
+      "Section",
+      "Description / Logic"
+    ],
+    "content": [
+      [
+        "AUTHOR",
+        "John Wesley Quintero"
+      ],
+      [
+        "USER GUIDE",
+        "This workbook is used to calculate and recommend wholesale buys based on Amazon and Keepa data."
+      ],
+      [
+        "BUY Tab",
+        "Main decision sheet. Enter ASINs here to see order recommendations."
+      ],
+      [
+        "AZInsight_Data Tab",
+        "Raw data from AZInsight research tool. Paste your Amazon research exports here."
+      ],
+      [
+        "KEEPA Tab",
+        "Historical price and rank data. Paste Keepa data exports here."
+      ],
+      [
+        "IP Qty Tab",
+        "Inventory Planning data. Used for barcode lookups and stock levels."
+      ],
+      [
+        "",
+        ""
+      ],
+      [
+        "CORE CALCULATIONS",
+        "Key formulas used in this template:"
+      ],
+      [
+        "Weighted BB Avg",
+        "((30d Avg * 30wt) + (90d Avg * 90wt) + (180d Avg * 180wt)) / Total Weights"
+      ],
+      [
+        "wtd avg",
+        "If AMZ OOS >= 65%, use BB Avg. Otherwise, use MIN(BB Avg, AMZ Avg * (1 - AMZ Less))."
+      ],
+      [
+        "Var. Opp.",
+        "Estimated Sales * Variation Weight * (Target Days / 30). Adjusted by AMZ Boss multiplier if applicable."
+      ],
+      [
+        "ROI/Profit",
+        "Highlights 'OK' if ROI >= Min ROI AND Profit >= Min Profit thresholds."
+      ],
+      [
+        "% Chng30/90",
+        "(Avg BSR - Current BSR) / Avg BSR. Positive means rank is improving."
+      ]
+    ]
+  },
+  "BUY": {
+    "summary_labels": {
+      "A1": "Total Items",
+      "C1": "Min Est Qty",
+      "H1": "Min Sell Price",
+      "I1": "Max BSR",
+      "L1": "3PL / Unit",
+      "O1": "Total Profit",
+      "P1": "Overall ROI",
+      "Q1": "Total Sales",
+      "U1": "Max Order Qty",
+      "V1": "Days of Stock",
+      "W1": "Supplier Commission",
+      "X1": "Discount",
+      "Y1": "Total Units",
+      "Z1": "Total Amount",
+      "AA1": "AMZ Less",
+      "AB1": "Case Pk Default",
+      "AC1": "Min ROI",
+      "AD1": "25%",
+      "AE1": "20%",
+      "AI1": "Max BSR 30",
+      "AJ1": "Max Chng 30",
+      "AK1": "Max BSR 90",
+      "AL1": "Max Chng 90",
+      "AM1": "Min Est Qty",
+      "AN1": "Var Opp",
+      "AO1": "Max AMZ OOS",
+      "AP1": "Max Bbox OOS"
+    },
+    "summary_values": {
+      "B1": 0,
+      "D1": 30,
+      "H2": 9.0,
+      "I2": 100000,
+      "L2": 0.0,
+      "O2": 0.0,
+      "P2": 0.0,
+      "Q2": 0.0,
+      "U2": 240,
+      "V2": 60,
+      "W2": 0.0,
+      "X2": 0.0,
+      "Y2": 0,
+      "Z2": 0.0,
+      "AA2": 0.0,
+      "AB2": 12,
+      "AC2": 0.05,
+      "AD2": 0.25,
+      "AE2": 0.2,
+      "AF2": "Min Profit",
+      "AG2": 1.5,
+      "AH2": 2.0,
+      "AI2": 125000,
+      "AJ2": 0.5,
+      "AK2": 150000,
+      "AL2": 0.75,
+      "AM2": 300,
+      "AN2": 0.07,
+      "AO2": 0.35,
+      "AP2": 0.5
+    },
+    "headers": [
+      "ASIN",
+      "AMZ Title",
+      "Est. Qty",
+      "New FBA",
+      "New MFN",
+      "Total Offers",
+      "Sell Price",
+      "Current BSR",
+      "Referral %",
+      "S & H",
+      "Proceeds",
+      "Profit",
+      "ROI",
+      "Sales Opp.",
+      "Suggested Pk",
+      "Pack Qty",
+      "Odr Qty (Pk)",
+      "Item Code",
+      "Description",
+      "Cost",
+      "Order Qty (Unit)",
+      "Order Amount",
+      "Var Weight",
+      "Case Pack",
+      "IP Qty",
+      "Stock",
+      "On Order",
+      "Velocity",
+      "Units Sold",
+      "Offers 90d",
+      "ROI/Profit",
+      "Visible",
+      "Var. Opp.",
+      "Use Qty",
+      "BSR 30 Avg",
+      "% Chng30",
+      "BSR 90 Avg",
+      "% Chng90",
+      "Avail. Qty",
+      "AMZ Boss",
+      "AMZ OOS",
+      "Bbox OOS",
+      "Brand",
+      "Keepa Link",
+      "AMZ Product Page",
+      "Check Gated in SC",
+      "Extra1",
+      "Extra2",
+      "Extra3"
+    ],
+    "header_row": 3
+  },
+  "AZInsight_Data": {
+    "summary_labels": {
+      "A1": "Total Items",
+      "C1": "Matches Found on AMZ",
+      "E1": "Not Found on AMZ"
+    },
+    "summary_values": {
+      "B1": "=COUNTA(A4:A{{MAX_ROWS_PLUS_3}})",
+      "D1": "=COUNTIF(A4:A{{MAX_ROWS_PLUS_3}}, \"*?\")",
+      "F1": "=B1-D1"
+    },
+    "headers": [
+      "ASIN",
+      "Product ID",
+      "Title",
+      "Package Quantity",
+      "Brand",
+      "Product Group",
+      "Total Offers",
+      "Sales Rank",
+      "Estimated Number of Sales",
+      "Profit",
+      "Margin",
+      "ROI",
+      "Purchase Price",
+      "Sell Price",
+      "Buy Box Landed",
+      "Seller Proceeds",
+      "Low New Fba Price",
+      "Low New Mfn Price",
+      "Referral Fee",
+      "Variable Closing Fee",
+      "Fulfillment Subtotal",
+      "Cost Sub Total",
+      "VAT %",
+      "VAT $",
+      "Inbound Shipping Estimate",
+      "Package Weight",
+      "Package Height",
+      "Package Length",
+      "Package Width",
+      "New FBA Num Offers",
+      "New MFN Num Offers",
+      "Keepa",
+      "CamelCC",
+      "Size",
+      "Last Run",
+      "Item Number",
+      "PRODUCT",
+      "SKU #",
+      "Size(1)",
+      "Case Pk",
+      "Salon price / each",
+      "Salon price / case",
+      "QTY",
+      "YOUR TOTAL COST",
+      "CASE COUNT"
+    ],
+    "header_row": 3
+  },
+  "ORDER": {
+    "headers": [
+      "Item Code",
+      "Description",
+      "Unit Cost",
+      "Order Qty",
+      "Total Amount"
+    ],
+    "header_row": 1
+  },
+  "KEEPA": {
+    "summary_labels": {
+      "B1": "30 wt",
+      "C1": "90 wt",
+      "D1": "180 wt",
+      "F1": "AMZ Less:"
+    },
+    "summary_values": {
+      "B2": 1,
+      "C2": 3,
+      "D2": 1,
+      "F2": 0.05
+    },
+    "headers": [
+      "ASIN",
+      "Baseline",
+      "BB Avg",
+      "AMZ Avg",
+      "wtd avg",
+      "Variations",
+      "Review Wt",
+      "Confidence",
+      "ASIN_SRC",
+      "Title",
+      "Buy Box: Current",
+      "Buy Box: 30 days avg.",
+      "Buy Box: 30 days drop %",
+      "Buy Box: 90 days avg.",
+      "Buy Box: 90 days drop %",
+      "Buy Box: 180 days avg.",
+      "Buy Box Seller",
+      "Amazon: Current",
+      "Amazon: 30 days avg.",
+      "Amazon: 30 days drop %",
+      "Amazon: 90 days avg.",
+      "Amazon: 90 days drop %",
+      "Amazon: 180 days avg.",
+      "Amazon out of stock percentage: 90 days OOS %",
+      "Sales Rank: Current",
+      "Sales Rank: 30 days avg.",
+      "Sales Rank: 30 days drop %",
+      "Sales Rank: 90 days avg.",
+      "Sales Rank: 90 days drop %",
+      "Sales Rank: 180 days avg.",
+      "Count of retrieved live offers: New, FBA",
+      "Count of retrieved live offers: New, FBM",
+      "New Offer Count: Current",
+      "New Offer Count: 90 days avg.",
+      "New, 3rd Party FBA: 30 days avg.",
+      "New, 3rd Party FBA: 90 days avg.",
+      "New, 3rd Party FBA: 180 days avg.",
+      "Variation ASINs",
+      "Parent ASIN",
+      "Reviews: Reviews - Format Specific",
+      "Variation Attributes",
+      "Reviews: Review Count",
+      "Model",
+      "Number of Items",
+      "Categories: Root",
+      "FBA Fees:",
+      "Referral Fee %",
+      "Buy Box out of stock percentage: 90 days OOS %"
+    ],
+    "header_row": 3
+  },
+  "IP Qty": {
+    "headers": [
+      "Image",
+      "Name",
+      "SKU",
+      "Barcode",
+      "Cost Price",
+      "Price",
+      "Replenishment",
+      "To Order",
+      "Stock",
+      "On Order",
+      "Sales",
+      "Adjusted Sales Velocity/mo",
+      "Lead Time",
+      "Days of Stock",
+      "Vendors",
+      "Brand",
+      "AVG Retail Price",
+      "Replenishable",
+      "In Buy Sheet?"
+    ],
+    "header_row": 1
+  }
+}
